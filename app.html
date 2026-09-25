@@ -94,6 +94,7 @@
       const p = presets[mode];
       $('indoor').value = p.indoor; $('outdoor').value = p.outdoor;
       $('setback').value = p.setback; $('months').value = p.months; $('bill').value = p.bill;
+      if (mode === 'cool') { fuelSel.value = 'electric'; setDefaults(); }
       $('l1').textContent = mode === 'heat' ? 'Indoor temp when home' : 'Normal AC setpoint';
       $('l2').textContent = mode === 'heat' ? 'Average outdoor temp' : 'Average afternoon outdoor temp';
       $('l3').textContent = mode === 'heat' ? 'Setback (degrees lower)' : 'Setpoint raise (degrees)';
