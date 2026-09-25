@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SetbackCalc - calculator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#0e1620; color:#e6eef6; min-height:100vh; }
+  .wrap { max-width:700px; margin:0 auto; padding:28px 20px 80px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  header h1 { font-size:22px; } header h1 span { color:#6db3f2; }
+  header a { color:#8b9fb3; text-decoration:none; font-size:14px; }
+  .card { background:#14202e; border:1px solid #223850; border-radius:12px; padding:18px; margin-bottom:18px; }
+  label { font-size:12px; color:#8b9fb3; display:block; margin-bottom:4px; }
+  input, select { background:#0e1620; border:1px solid #2a4a66; border-radius:8px; color:#e6eef6; padding:9px 10px; font-size:14px; width:100%; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+  button { background:#6db3f2; border:none; color:#0a1420; font-weight:700; padding:11px 22px; border-radius:9px; font-size:14px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  .seg { display:flex; gap:0; margin-bottom:14px; }
+  .seg button { background:#1b2c3f; color:#a9bdd1; border-radius:0; padding:8px 16px; font-weight:600; }
+  .seg button:first-child { border-radius:8px 0 0 8px; }
+  .seg button:last-child { border-radius:0 8px 8px 0; }
+  .seg button.on { background:#6db3f2; color:#0a1420; }
+  .big { font-size:40px; font-weight:800; color:#6db3f2; }
+  .stats { display:flex; gap:26px; flex-wrap:wrap; margin:8px 0 4px; }
+  .stat b { font-size:24px; color:#fff; display:block; }
+  .stat span { font-size:12px; color:#8b9fb3; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #1d3045; }
+  th { color:#8b9fb3; font-weight:600; font-size:12px; }
+  td.p { color:#6db3f2; font-weight:700; }
+  .warn { background:#3a2a13; border:1px solid #8a6a22; color:#ffd987; padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:14px; }
+  .fine { color:#5a6b7d; font-size:12px; margin-top:14px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Setback<span>Calc</span></h1><a href="index.html">home</a></header>
+
+  <div class="card">
+    <div class="seg" id="modeseg">
+      <button data-m="heat" class="on">Heating (winter)</button>
+      <button data-m="cool">Cooling (summer)</button>
+    </div>
+    <div class="row3">
+      <div><label id="l1">Indoor temp when home</label><input id="indoor" type="number" value="21"></div>
+      <div><label id="l2">Average outdoor temp</label><input id="outdoor" type="number" value="0"></div>
+      <div><label>Unit</label><select id="unit"><option value="C">°C</option><option value="F">°F</option></select></div>
+    </div>
+    <div class="row3">
+      <div><label id="l3">Setback (degrees)</label><input id="setback" type="number" value="4"></div>
+      <div><label>Hours per day</label><input id="hours" type="number" value="8"></div>
+      <div><label>Season length (months)</label><input id="months" type="number" value="6"></div>
+    </div>
+    <div class="row3">
+      <div><label id="l4">Monthly heating bill ($)</label><input id="bill" type="number" value="180"></div>
+      <div><label>Fuel</label><select id="fuel"></select></div>
+      <div><label id="l5">Price per unit ($)</label><input id="price" type="number" step="0.01"></div>
+    </div>
+    <button id="go">Calculate</button>
+  </div>
+
+  <div id="out"></div>
+  <div class="fine">Model: heating/cooling energy is proportional to the average indoor-outdoor temperature difference. A setback of S degrees for H hours a day cuts the daily average by S x H / 24, so the bill shrinks by that amount divided by the normal difference. Real homes also see recovery-ramp effects; treat results as a solid estimate, not a meter reading.</div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const fuelSel = $('fuel');
+  Object.keys(SetbackEngine.FUELS).forEach(k => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = SetbackEngine.FUELS[k].label;
+    fuelSel.appendChild(o);
+  });
+  let mode = 'heat';
+  const presets = {
+    heat: { indoor: 21, outdoor: 0, setback: 4, months: 6, bill: 180 },
+    cool: { indoor: 24, outdoor: 32, setback: 3, months: 4, bill: 150 }
+  };
+  function setDefaults() {
+    $('price').value = SetbackEngine.FUELS[fuelSel.value].price;
+    $('l5').textContent = 'Price per ' + SetbackEngine.FUELS[fuelSel.value].unit + ' ($)';
+  }
+  fuelSel.onchange = setDefaults;
+  setDefaults();
+
+  document.querySelectorAll('#modeseg button').forEach(b => {
+    b.onclick = () => {
+      mode = b.dataset.m;
+      document.querySelectorAll('#modeseg button').forEach(x => x.classList.toggle('on', x === b));
+      const p = presets[mode];
+      $('indoor').value = p.indoor; $('outdoor').value = p.outdoor;
+      $('setback').value = p.setback; $('months').value = p.months; $('bill').value = p.bill;
+      $('l1').textContent = mode === 'heat' ? 'Indoor temp when home' : 'Normal AC setpoint';
+      $('l2').textContent = mode === 'heat' ? 'Average outdoor temp' : 'Average afternoon outdoor temp';
+      $('l3').textContent = mode === 'heat' ? 'Setback (degrees lower)' : 'Setpoint raise (degrees)';
+      $('l4').textContent = mode === 'heat' ? 'Monthly heating bill ($)' : 'Monthly cooling bill ($)';
+      calc();
+    };
+  });
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function usd(x){ return '$' + x.toFixed(2); }
+
+  function calc() {
+    const out = $('out');
+    const indoor = Number($('indoor').value), outdoor = Number($('outdoor').value);
+    const deltaT = Math.abs(indoor - outdoor);
+    let r;
+    try {
+      r = SetbackEngine.report({
+        setbackDeg: Number($('setback').value),
+        setbackHours: Number($('hours').value),
+        deltaT: deltaT,
+        monthlyBill: Number($('bill').value),
+        months: Number($('months').value),
+        fuel: fuelSel.value,
+        pricePerUnit: $('price').value
+      });
+    } catch(e) {
+      out.innerHTML = '<div class="warn">' + esc(e.message) + '</div>';
+      return;
+    }
+    const rows = SetbackEngine.table(Math.max(1, Math.min(10, Math.round(Number($('setback').value) * 2) || 8)), Number($('hours').value), deltaT);
+    let html = '<div class="card"><div class="big">' + (r.pct * 100).toFixed(1) + '% off</div>'
+      + '<div class="stats">'
+      + '<div class="stat"><b>' + usd(r.perMonth) + '</b><span>saved per month</span></div>'
+      + '<div class="stat"><b>' + usd(r.perSeason) + '</b><span>saved per ' + r.months + '-month season</span></div>'
+      + '<div class="stat"><b>' + r.unitsPerMonth.toFixed(1) + ' ' + esc(r.unitLabel) + '</b><span>energy saved monthly</span></div>'
+      + '<div class="stat"><b>' + Math.round(r.co2PerSeason) + ' kg</b><span>CO2 avoided per season</span></div>'
+      + '</div></div>';
+    html += '<div class="card"><label>Setback size comparison (' + esc($('hours').value) + ' h/day, ' + deltaT + ' deg difference)</label>'
+      + '<table><tr><th>Setback</th><th>Bill cut</th><th>$/month</th></tr>'
+      + rows.map(w => '<tr><td>' + w.setbackDeg + ' deg</td><td class="p">' + (w.pct * 100).toFixed(1) + '%</td><td>' + usd(w.pct * Number($('bill').value)) + '</td></tr>').join('')
+      + '</table></div>';
+    out.innerHTML = html;
+  }
+
+  $('go').onclick = () => {
+    try {
+      localStorage.setItem('setbackcalc-settings', JSON.stringify({
+        mode: mode, indoor: $('indoor').value, outdoor: $('outdoor').value, unit: $('unit').value,
+        setback: $('setback').value, hours: $('hours').value, months: $('months').value,
+        bill: $('bill').value, fuel: fuelSel.value, price: $('price').value
+      }));
+    } catch(e) {}
+    calc();
+  };
+
+  try {
+    const s = JSON.parse(localStorage.getItem('setbackcalc-settings') || '{}');
+    if (s.indoor) {
+      $('indoor').value = s.indoor; $('outdoor').value = s.outdoor; $('unit').value = s.unit || 'C';
+      $('setback').value = s.setback; $('hours').value = s.hours; $('months').value = s.months;
+      $('bill').value = s.bill; fuelSel.value = s.fuel || 'gas';
+      if (s.price) $('price').value = s.price;
+      setDefaults();
+      if (s.price) $('price').value = s.price;
+      if (s.mode === 'cool') document.querySelector('#modeseg button[data-m=cool]').click();
+    }
+  } catch(e) {}
+  calc();
+})();
+</script>
+</body>
+</html>
